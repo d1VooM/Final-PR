@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>ToDo & Mail System | Cannon Edition</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background: #f0f2f5; padding-top: 30px; font-family: 'Segoe UI', Tahoma, sans-serif; }
+        .card { border: none; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); margin-bottom: 15px; }
+        .imap-section { background: #ffffff; border-left: 5px solid #dc3545; padding: 20px; border-radius: 10px; }
+        .btn-add { background: #dc3545; color: white; border: none; }
+        .btn-add:hover { background: #a71d2a; color: white; }
+        .cannon-logo { width: 50px; height: auto; margin-right: 15px; }
+        .cannon-icon-sm { width: 20px; height: auto; margin-right: 5px; vertical-align: middle; }
+        .status-badge { font-size: 0.7rem; vertical-align: middle; margin-left: 10px; }
+    </style>
+</head>
+<body>
+
+<div class="container" style="max-width: 800px;">
+    <div class="d-flex align-items-center justify-content-center mb-4">
+        <img src="https://i.imgur.com/4LyOcGi.jpeg" class="cannon-logo" alt="Logo">
+        <h2 class="mb-0">ToDo & Email Lab <span id="wsStatus" class="badge bg-secondary status-badge">WS Offline</span></h2>
+    </div>
+
+    <div class="imap-section mb-4 shadow-sm">
+        <div class="d-flex justify-content-between align-items-center">
+            <h5>📥 Последнее входящее (IMAP)</h5>
+            <button onclick="fetchLastEmail()" class="btn btn-sm btn-outline-danger">Обновить</button>
+        </div>
+        <div id="emailView" class="mt-2 text-muted">Нажмите "Обновить" для загрузки почты...</div>
+    </div>
+
+    <div class="card p-4 mb-4">
+        <div class="row g-2">
+            <div class="col-md-5">
+                <input type="text" id="taskTitle" class="form-control" placeholder="Название задачи">
+            </div>
+            <div class="col-md-5">
+                <input type="text" id="taskDesc" class="form-control" placeholder="Описание (детали)">
+            </div>
+            <div class="col-md-2">
+                <button onclick="addNewTask()" class="btn btn-add w-100">Создать</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="taskList"></div>
+</div>
+
+<div class="modal fade" id="emailModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content shadow">
+            <div class="modal-header bg-light">
+                <h5 class="modal-title">
+                    <img src="https://i.ibb.co/p66pM4v/cannon-red.jpg" class="cannon-icon-sm" alt="icon">
+                    Отправка письма
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Кому (Email)</label>
+                    <input type="email" id="mailRecipient" class="form-control" placeholder="example@mail.com">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Тема письма</label>
+                    <input type="text" id="mailSub" class="form-control">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Текст сообщения</label>
+                    <textarea id="mailTxt" class="form-control" rows="5"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-light" data-bs-dismiss="modal">Отмена</button>
+                <button onclick="submitEmail()" class="btn btn-danger">Выстрелить письмом</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    const API_URL = "http://localhost:8000";
+    const WS_URL = "ws://localhost:8000/ws";
+    let modalInstance;
+    let socket;
+
+    document.addEventListener('DOMContentLoaded', () => {
+        modalInstance = new bootstrap.Modal(document.getElementById('emailModal'));
+        refreshTasks();
+        connectWebSocket(); // Инициализация сокетов
+    });
+
+    // --- ЛОГИКА WEBSOCKET (Лабораторная №5) ---
+    function connectWebSocket() {
+        socket = new WebSocket(WS_URL);
+        const statusBadge = document.getElementById('wsStatus');
+
+        socket.onopen = () => {
+            statusBadge.innerText = "WS Live";
+            statusBadge.className = "badge bg-success status-badge";
+            console.log("Connected to WebSocket server");
+        };
+
+        socket.onmessage = (event) => {
+            if (event.data === "refresh") {
+                console.log("Received sync command. Refreshing tasks...");
+                refreshTasks();
+            }
+        };
+
+        socket.onclose = () => {
+            statusBadge.innerText = "WS Offline";
+            statusBadge.className = "badge bg-secondary status-badge";
+            console.log("Disconnected. Reconnecting in 3 seconds...");
+            setTimeout(connectWebSocket, 3000);
+        };
+
+        socket.onerror = (err) => {
+            console.error("Socket error:", err);
+            socket.close();
+        };
+    }
+
+    // --- ОСНОВНЫЕ ФУНКЦИИ ---
+    async function refreshTasks() {
+        try {
+            const res = await fetch(`${API_URL}/tasks`);
+            const tasks = await res.json();
+            const list = document.getElementById('taskList');
+            list.innerHTML = '';
+            
+            tasks.forEach(t => {
+                list.innerHTML += `
+                    <div class="card p-3">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <strong style="font-size: 1.1rem;">${t.title}</strong><br>
+                                <small class="text-secondary">${t.description || 'Нет описания'}</small>
+                            </div>
+                            <div>
+                                <button onclick="openMailBox('${t.title}', '${t.description}')" class="btn btn-sm btn-outline-dark me-2">
+                                    📧 Отправить
+                                </button>
+                                <button onclick="deleteTask(${t.id})" class="btn btn-sm btn-link text-danger p-0">
+                                    🗑️
+                                </button>
+                            </div>
+                        </div>
+                    </div>`;
+            });
+        } catch (e) { console.error("Ошибка обновления задач:", e); }
+    }
+
+    async function addNewTask() {
+        const t = document.getElementById('taskTitle').value;
+        const d = document.getElementById('taskDesc').value;
+        if(!t) return alert("Введите название!");
+        
+        try {
+            await fetch(`${API_URL}/tasks?title=${encodeURIComponent(t)}&description=${encodeURIComponent(d)}`, {method: 'POST'});
+            document.getElementById('taskTitle').value = '';
+            document.getElementById('taskDesc').value = '';
+            // refreshTasks() вызывать не обязательно, сокет пришлет команду всем
+        } catch (e) { alert("Ошибка при создании задачи."); }
+    }
+
+    async function deleteTask(id) {
+        try {
+            await fetch(`${API_URL}/tasks/${id}`, {method: 'DELETE'});
+            // refreshTasks() вызывать не обязательно
+        } catch (e) { alert("Ошибка при удалении."); }
+    }
+
+    function openMailBox(title, desc) {
+        document.getElementById('mailRecipient').value = "";
+        document.getElementById('mailSub').value = "Отчет: " + title;
+        document.getElementById('mailTxt').value = `Детали:\n${desc}`;
+        modalInstance.show();
+    }
+
+    async function submitEmail() {
+        const to = document.getElementById('mailRecipient').value;
+        const s = document.getElementById('mailSub').value;
+        const b = document.getElementById('mailTxt').value;
+        
+        if(!to) return alert("Введите адрес получателя!");
+        modalInstance.hide();
+        
+        try {
+            const res = await fetch(`${API_URL}/send-mail?to=${encodeURIComponent(to)}&title=${encodeURIComponent(s)}&content=${encodeURIComponent(b)}`, {method: 'POST'});
+            if(res.ok) alert("Письмо успешно отправлено!");
+            else alert("Ошибка при отправке.");
+        } catch (e) { alert("Сервер бэкенда недоступен."); }
+    }
+
+    async function fetchLastEmail() {
+        const viewer = document.getElementById('emailView');
+        viewer.innerHTML = "<i>Загрузка...</i>";
+        try {
+            const res = await fetch(`${API_URL}/last-received`);
+            const data = await res.json();
+            viewer.innerHTML = `
+                <div class="p-2 border rounded bg-light mt-2">
+                    <b>Тема:</b> ${data.subject}<br>
+                    <b>Текст:</b> ${data.body}
+                </div>`;
+        } catch (e) { viewer.innerHTML = "<span class='text-danger'>Ошибка загрузки почты.</span>"; }
+    }
+</script>
+</body>
+</html>
