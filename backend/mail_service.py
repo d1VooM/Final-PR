@@ -64,7 +64,7 @@ def get_last_email_imap():
                 mail.logout()
                 return {"subject": subject, "body": body[:200]}
         
-      mail.logout()
+        mail.logout()
         return {"subject": "Не удалось прочитать", "body": ""}
     except Exception as e:
         print(f"IMAP Error: {e}")
