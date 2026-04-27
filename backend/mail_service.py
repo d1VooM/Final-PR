@@ -64,11 +64,13 @@ def get_last_email_imap():
                 mail.logout()
                 return {"subject": subject, "body": body[:200]}
         
-        mail.logout()
+      mail.logout()
         return {"subject": "Не удалось прочитать", "body": ""}
     except Exception as e:
         print(f"IMAP Error: {e}")
-        return {"subject": "Ошибка IMAP", "body": str(e)}import smtplib
+        return {"subject": "Ошибка IMAP", "body": str(e)}
+
+import smtplib
 import imaplib
 import email
 from email.header import decode_header
