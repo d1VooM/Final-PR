@@ -1,0 +1,52 @@
+name: CI/CD Pipeline Lab 6
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  build-test-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    # 1. Сборка образов
+    - name: Build Docker Images
+      run: |
+        docker build -t ${{ secrets.DOCKER_HUB_USERNAME }}/todo-backend:latest ./backend
+        docker build -t ${{ secrets.DOCKER_HUB_USERNAME }}/todo-frontend:latest ./frontend
+
+    # 2. Поднятие контейнеров
+    - name: Run Containers
+      run: |
+        docker run -d -p 8000:8000 --name backend-api ${{ secrets.DOCKER_HUB_USERNAME }}/todo-backend:latest
+        docker run -d -p 80:80 --name frontend-web ${{ secrets.DOCKER_HUB_USERNAME }}/todo-frontend:latest
+        sleep 5 # Ждем запуска сервера
+
+    # 3. Проверка работоспособности (curl)
+    - name: Test Endpoints
+      run: |
+        curl --fail http://localhost:8000/tasks || exit 1
+        echo "Backend is reachable!"
+        curl --fail http://localhost:80 || exit 1
+        echo "Frontend is reachable!"
+
+    # 4. Остановка и очистка
+    - name: Stop and Cleanup
+      run: |
+        docker stop backend-api frontend-web
+        docker rm backend-api frontend-web
+
+    # 5. Логин и Загрузка на Docker Hub
+    - name: Login to Docker Hub
+      uses: docker/login-action@v2
+      with:
+        username: ${{ secrets.DOCKER_HUB_USERNAME }}
+        password: ${{ secrets.DOCKER_HUB_TOKEN }}
+
+    - name: Push to Docker Hub
+      run: |
+        docker push ${{ secrets.DOCKER_HUB_USERNAME }}/todo-backend:latest
+        docker push ${{ secrets.DOCKER_HUB_USERNAME }}/todo-frontend:latest
