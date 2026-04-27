@@ -23,14 +23,16 @@ jobs:
       run: |
         docker run -d -p 8000:8000 --name backend-api ${{ secrets.DOCKER_HUB_USERNAME }}/todo-backend:latest
         docker run -d -p 80:80 --name frontend-web ${{ secrets.DOCKER_HUB_USERNAME }}/todo-frontend:latest
-        sleep 15 # Увеличили ожидание, чтобы FastAPI успел запуститься
+        sleep 20 # Увеличили до 20 секунд для верности
 
-    # 3. Проверка работоспособности (curl)
+    # 3. Проверка работоспособности
     - name: Test Endpoints
       run: |
-        echo "Checking Backend logs before test..."
+        echo "=== Backend Logs ==="
         docker logs backend-api
-        curl --fail http://localhost:8000/tasks || exit 1
+        echo "=== Testing Connection ==="
+        # Пробуем curl с несколькими попытками
+        curl --retry 5 --retry-delay 5 --fail http://localhost:8000/tasks || exit 1
         echo "Backend is reachable!"
         curl --fail http://localhost:80 || exit 1
         echo "Frontend is reachable!"
